@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Circles vs Blocks</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-image: url('background.png'); /* Ensure the image path is correct */
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            margin: 0; /* Remove any default margin */
+            padding: 0; /* Remove any default padding */
+        }
+        .content {
+            position: relative;
+            z-index: 1;
+        }
+        .hero-background {
+            background: none;
+            height: 50vh;
+        }
+        .game-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 60vh;
+            background: transparent; /* Ensure background is transparent */
+            margin: 0 auto; /* Center the game container */
+            padding: 0; /* Remove any padding */
+        }
+    </style>
+</head>
+<body>
+
+<div class="content">
+    <header class="bg-blue-800 text-white p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-3xl font-bold">Circles vs Blocks</h1>
+            <nav>
+                <ul class="flex space-x-4">
+                    <li><a href="#" class="text-lg">Home</a></li>
+                    <li><a href="#" class="text-lg">How to Play</a></li>
+                    <li><a href="#" class="text-lg">Contact</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <section class="hero-background flex items-center justify-center">
+        <div class="text-center hero-text">
+            <h2 class="text-4xl font-bold mb-4">Defend Your Base!</h2>
+            <p class="text-xl">Place plants, upgrade them, and fend off the blocks!</p>
+        </div>
+    </section>
+
+    <main class="container mx-auto py-8">
+        <div class="game-container">
+            <iframe src="game2.0.html" width="800" height="600" class="border-2 border-gray-400 rounded"></iframe>
+        </div>
+        <div class="instructions text-center mt-8">
+            <h2 class="text-2xl font-semibold mb-4">‎ </h2>
+            <p>Click to place a plant (Cost: 50 sun). Right-click to upgrade (Cost: 100 sun). Protect your base from the blocks!</p>
+        </div>
+    </main>
+
+    <footer class="bg-gray-800 text-white py-4">
+        <div class="container mx-auto text-center">
+            <p>&copy; 2024 Circles vs Blocks. All rights reserved.</p>
+        </div>
+    </footer>
+</div>
+
+</body>
+</html>

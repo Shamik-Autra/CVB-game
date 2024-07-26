@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plants vs Zombies Mini</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #inventory {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .plant-option, .shovel-option {
+            border: 2px solid #000;
+            padding: 5px;
+            margin: 0 5px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .selected {
+            border-color: #ff9900;
+        }
+        #gameCanvas {
+            border: 2px solid #000;
+            background-color: #7cba3d;
+        }
+        #gameInfo {
+            margin-top: 10px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div id="inventory">
+        <div class="plant-option" data-plant="peashooter">Peashooter (100 sun)</div>
+        <div class="plant-option" data-plant="sunflower">Sunflower (50 sun)</div>
+        <div class="plant-option" data-plant="nutwall">Nut Wall (75 sun)</div>
+        <div class="shovel-option" data-tool="shovel">Shovel</div>
+    </div>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <div id="gameInfo">
+        Sun: <span id="sunCount">50</span> | 
+        Score: <span id="scoreCount">0</span> | 
+        Time: <span id="timeCount">0</span>s | 
+        Click to place a plant (Cost: 50 sun) | 
+        Right-click to upgrade (Cost: 100 sun)
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const sunCountElement = document.getElementById('sunCount');
+        const scoreCountElement = document.getElementById('scoreCount');
+        const timeCountElement = document.getElementById('timeCount');
+        const plantOptions = document.querySelectorAll('.plant-option');
+        const shovelOption = document.querySelector('.shovel-option');
+
+        let selectedPlant = 'peashooter';
+        let toolMode = 'plant'; // Can be 'plant' or 'shovel'
+        let gameOver = false;
+        let gameWon = false;
+        let sunCount = 50;
+        let sunTimer = 0;
+        let score = 0;
+        let gameTime = 0;
+        let zombieSpawnRate = 0.005;
+        let zombieStrength = 1;
+
+        const columnCount = 8;
+        const columnWidth = canvas.width / columnCount;
+        const rowCount = 3;
+        const rowHeight = canvas.height / rowCount;
+
+        const plants = [];
+        const zombies = [];
+        const projectiles = [];
+
+        const plantCosts = {
+            peashooter: 100,
+            sunflower: 50,
+            nutwall: 75,
+        };
+
+        const plantHealth = {
+            peashooter: 30,
+            nutwall: 120, // Four times the health of peashooters
+        };
+
+        plantOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                plantOptions.forEach(opt => opt.classList.remove('selected'));
+                shovelOption.classList.remove('selected');
+                option.classList.add('selected');
+                selectedPlant = option.dataset.plant;
+                toolMode = 'plant';
+            });
+        });
+
+        shovelOption.addEventListener('click', () => {
+            plantOptions.forEach(opt => opt.classList.remove('selected'));
+            shovelOption.classList.add('selected');
+            toolMode = 'shovel';
+        });
+
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+            for (let i = 1; i < columnCount; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * columnWidth, 0);
+                ctx.lineTo(i * columnWidth, canvas.height);
+                ctx.stroke();
+            }
+            for (let i = 1; i < rowCount; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, i * rowHeight);
+                ctx.lineTo(canvas.width, i * rowHeight);
+                ctx.stroke();
+            }
+        }
+
+        function drawHealthBar(x, y, width, height, health, maxHealth) {
+            const healthPercentage = health / maxHealth;
+            ctx.fillStyle = 'red';
+            ctx.fillRect(x, y, width, height);
+            ctx.fillStyle = 'green';
+            ctx.fillRect(x, y, width * healthPercentage, height);
+        }
+
+        function drawPlant(plant) {
+            ctx.fillStyle = plant.type === 'peashooter' ? 'green' : plant.type === 'sunflower' ? 'yellow' : 'brown';
+            ctx.beginPath();
+            ctx.arc(plant.x, plant.y, plant.size / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText(plant.level, plant.x - 6, plant.y + 7);
+            
+            drawHealthBar(plant.x - plant.size / 2, plant.y - 30, plant.size, 5, plant.health, plant.maxHealth);
+        }
+
+        function drawZombies() {
+            zombies.forEach(zombie => {
+                ctx.fillStyle = 'gray';
+                ctx.fillRect(zombie.x, zombie.y - zombie.size / 2, zombie.size, zombie.size);
+                
+                drawHealthBar(zombie.x, zombie.y - zombie.size / 2 - 10, zombie.size, 5, zombie.health, zombie.maxHealth);
+            });
+        }
+
+        function drawProjectiles() {
+            projectiles.forEach(projectile => {
+                ctx.fillStyle = 'yellow';
+                ctx.beginPath();
+                ctx.arc(projectile.x, projectile.y, projectile.size / 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function updateGame() {
+            if (gameOver || gameWon) return;
+
+            gameTime++;
+            timeCountElement.textContent = Math.floor(gameTime / 60);
+
+            // Increase difficulty over time
+            zombieSpawnRate = Math.min(0.02, 0.005 + gameTime / 60000);
+            zombieStrength = 1 + Math.floor(gameTime / 3600);
+
+            sunTimer++;
+            if (sunTimer >= 300) {
+                sunCount += 25;
+                updateSunCount();
+                sunTimer = 0;
+            }
+
+            // Move zombies and handle plant attacks
+            zombies.forEach(zombie => {
+                if (!zombie.isAttacking) {
+                    zombie.x -= zombie.speed;
+                }
+
+                if (zombie.x <= 0) {
+                    gameOver = true;
+                }
+
+                // Check for zombie-plant collisions
+                plants.forEach(plant => {
+                    if (Math.abs(zombie.x - plant.x) < plant.size / 2 + zombie.size / 2 && zombie.row === plant.row) {
+                        zombie.isAttacking = true;
+                        plant.health -= 0.05 * zombieStrength;
+                        if (plant.health <= 0) {
+                            plants.splice(plants.indexOf(plant), 1);
+                            zombie.isAttacking = false;
+                        }
+                    }
+                });
+            });
+
+            // Plants shoot or produce sun
+            plants.forEach(plant => {
+                if (plant.type === 'peashooter') {
+                    if (plant.shootCooldown <= 0) {
+                        projectiles.push({
+                            x: plant.x + plant.size / 2,
+                            y: plant.y,
+                            size: 10,
+                            speed: 5,
+                            damage: plant.level
+                        });
+                        plant.shootCooldown = 60 / plant.level;
+                    } else {
+                        plant.shootCooldown--;
+                    }
+                } else if (plant.type === 'sunflower') {
+                    if (plant.sunCooldown <= 0) {
+                        sunCount += 50;
+                        updateSunCount();
+                        plant.sunCooldown = 600; // 10 seconds
+                    } else {
+                        plant.sunCooldown--;
+                    }
+                }
+            });
+
+            // Move projectiles
+            projectiles.forEach(projectile => {
+                projectile.x += projectile.speed;
+            });
+
+            // Check for collisions
+            projectiles.forEach((projectile, pIndex) => {
+                zombies.forEach((zombie, zIndex) => {
+                    if (
+                        projectile.x < zombie.x + zombie.size &&
+                        projectile.x + projectile.size > zombie.x &&
+                        projectile.y < zombie.y + zombie.size / 2 &&
+                        projectile.y + projectile.size > zombie.y - zombie.size / 2
+                    ) {
+                        zombie.health -= projectile.damage;
+                        if (zombie.health <= 0) {
+                            zombies.splice(zIndex, 1);
+                            score += 10;
+                            updateScore();
+                            sunCount += 25;
+                            updateSunCount();
+                        }
+                        projectiles.splice(pIndex, 1);
+                    }
+                });
+            });
+
+            // Remove off-screen projectiles and zombies
+            projectiles.splice(0, projectiles.length, ...projectiles.filter(p => p.x < canvas.width));
+            zombies.splice(0, zombies.length, ...zombies.filter(z => z.x + z.size > 0));
+
+            // Spawn zombies
+            if (Math.random() < zombieSpawnRate) {
+                const randomRow = Math.floor(Math.random() * rowCount);
+                zombies.push({
+                    x: canvas.width,
+                    y: randomRow * rowHeight + rowHeight / 2,
+                    size: 50,
+                    speed: 0.2,
+                    health: 10 * zombieStrength,
+                    maxHealth: 10 * zombieStrength,
+                    row: randomRow,
+                    isAttacking: false
+                });
+            }
+
+            // Check for win condition
+            if (score >= 500) {
+                gameWon = true;
+            }
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGrid();
+            updateGame();
+            plants.forEach(drawPlant);
+            drawZombies();
+            drawProjectiles();
+
+            if (gameOver) {
+                ctx.fillStyle = 'red';
+                ctx.font = '48px Arial';
+                ctx.fillText('Game Over!', canvas.width / 2 - 100, canvas.height / 2);
+            } else if (gameWon) {
+                ctx.fillStyle = 'green';
+                ctx.font = '48px Arial';
+                ctx.fillText('You Win!', canvas.width / 2 - 80, canvas.height / 2);
+            } else {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function updateSunCount() {
+            sunCountElement.textContent = sunCount;
+        }
+
+        function updateScore() {
+            scoreCountElement.textContent = score;
+        }
+
+        canvas.addEventListener('click', (event) => {
+            if (gameOver || gameWon) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            const column = Math.floor(x / columnWidth);
+            const row = Math.floor(y / rowHeight);
+
+            if (toolMode === 'plant' && sunCount >= plantCosts[selectedPlant]) {
+                const existingPlant = plants.find(p => p.column === column && p.row === row);
+                if (!existingPlant) {
+                    let plant;
+                    if (selectedPlant === 'peashooter') {
+                        plant = {
+                            x: column * columnWidth + columnWidth / 2,
+                            y: row * rowHeight + rowHeight / 2,
+                            size: 50,
+                            shootCooldown: 0,
+                            level: 1,
+                            column: column,
+                            row: row,
+                            health: plantHealth.peashooter,
+                            maxHealth: plantHealth.peashooter,
+                            type: 'peashooter'
+                        };
+                    } else if (selectedPlant === 'sunflower') {
+                        plant = {
+                            x: column * columnWidth + columnWidth / 2,
+                            y: row * rowHeight + rowHeight / 2,
+                            size: 50,
+                            level: 1,
+                            column: column,
+                            row: row,
+                            health: 20,
+                            maxHealth: 20,
+                            type: 'sunflower',
+                            sunCooldown: 600 // Initial cooldown before producing sun
+                        };
+                    } else if (selectedPlant === 'nutwall') {
+                        plant = {
+                            x: column * columnWidth + columnWidth / 2,
+                            y: row * rowHeight + rowHeight / 2,
+                            size: 50,
+                            level: 1,
+                            column: column,
+                            row: row,
+                            health: plantHealth.nutwall,
+                            maxHealth: plantHealth.nutwall,
+                            type: 'nutwall'
+                        };
+                    }
+                    plants.push(plant);
+                    sunCount -= plantCosts[selectedPlant];
+                    updateSunCount();
+                }
+            } else if (toolMode === 'shovel') {
+                const plantIndex = plants.findIndex(p => p.column === column && p.row === row);
+                if (plantIndex !== -1) {
+                    const removedPlant = plants.splice(plantIndex, 1)[0];
+                    const refundAmount = Math.floor(plantCosts[removedPlant.type] / 2);
+                    sunCount += refundAmount;
+                    updateSunCount();
+                }
+            }
+        });
+
+        canvas.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            if (gameOver || gameWon) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            const column = Math.floor(x / columnWidth);
+            const row = Math.floor(y / rowHeight);
+
+            const existingPlant = plants.find(p => p.column === column && p.row === row);
+            if (toolMode === 'plant' && existingPlant && existingPlant.level < 3 && sunCount >= 100) {
+                existingPlant.level++;
+                existingPlant.health = existingPlant.maxHealth;
+                sunCount -= 100;
+                updateSunCount();
+            }
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>
